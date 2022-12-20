@@ -1,0 +1,94 @@
+import requests
+import re
+import os
+
+# 里面的kz8a0hw的变化不影响网站的打开
+# 第一页：https://huaban.com/search/?q=%E6%96%97%E7%BD%97%E5%A4%A7%E9%99%86&kz8a0hvh  但是不妨碍直接page=1来获取里面的pin_id
+# 第二页：https://huaban.com/search/?q=%E6%96%97%E7%BD%97%E5%A4%A7%E9%99%86&kz8a0hwn&page=2&per_page=20&wfl=1
+# 尾部页面看情况先
+# 如上里面有20个pin_id，就是图片id  放在这里：https://huaban.com/pins/{pin_id}/ 然后访问
+# 如上拼接pin_id得到的url就能找到图片地址中的45e334fec1450e1c12d605ddee64705cc832da1919579e-9xYbSv然后自己拼接剩下的结果
+# https://hbimg.huabanimg.com/{45e334fec1450e1c12d605ddee64705cc832da1919579e-9xYbSv}_fw658
+# 这里的尾部_fw658的658相当于是是图片像素，可以直接拼接图片url
+# url = 'https://huaban.com/search/?q=%E6%96%97%E7%BD%97%E5%A4%A7%E9%99%86&kz8a0hwn&page=1&per_page=20&wfl=1'
+
+
+def get_name():
+    while True:
+        try:
+            input_name = input('请输入你要爬取图片的名字：')
+            # 第一页url主要还是为了获取总页数和总张数
+            name_url = f'https://huaban.com/search/?q={input_name}&kz8a0hwn&page=1&per_page=20&wfl=1'
+            get_name_url = requests.get(name_url).text
+            if 'pin_id' in get_name_url:
+                # 这里页数默认加1，经过测试得到
+                int_a = int(re.findall(r'pin_count"\] = (.*);', get_name_url)[0]) + 1
+                # 输入出url、输入的名字和总页数
+                return input_name, int_a
+            else:
+                print('没有搜索到相关内容，请重新输入！')
+        except ValueError as f:
+            print(f'{f},程序出错！')
+
+
+# 输入获取页数得到各个页数的url
+def input_pages(data):
+    print(data[0], '的总张数为：', data[1] - 1)
+    # 每一页有20张，所有总页数为
+    numbers01 = int(data[1] - 1) // 20 + 1
+    print('总页数为：', numbers01)
+    number_url_list = []
+    while True:
+        try:
+            input_kaishi_pages = int(input('请输入开始爬取的页数：'))
+            input_end_pages = int(input('请输入结束爬取的页数：'))
+            if numbers01 >= input_end_pages >= input_kaishi_pages > 0:
+                for i in range(input_kaishi_pages, input_end_pages + 1):
+                    number_url = f'https://huaban.com/search/?q={data[0]}&kz8a0hwn&page={i}&per_page=20&wfl=1'
+                    number_url_list.append(number_url)
+                return number_url_list
+            else:
+                print('输入的程序逻辑出现错误，请重新输入！')
+        except ValueError as f:
+            print(f'{f},程序出错！')
+
+
+# 正式请求要获取的每一页的url得到每页里面的pin_id并且合成并存储到本地
+def get_pages_url(ye_url):
+    num = 1
+    for i in ye_url:
+        print('外部url为：', i)
+        get_zhang = requests.get(i).text
+        # 正则提取pin_id中的相关内容,在通过,分隔
+        str_data = re.findall(r'app.page\["pins"\] = \[(.*)\]', get_zhang)[0].split(',')
+        # 遍历数据获得pin_id的数据并将空的不需要的pin_id去除
+        for i1 in str_data:
+            str_pin_id = re.findall('"pin_id":(\\d*)', i1)
+            if 'pin_id' in i1 and str_pin_id != ['']:
+                get_id = requests.get(f'https://huaban.com/pins/{str_pin_id[0]}/').text
+                # 正则提取key的值
+                img_id = re.findall('"key":"(.*?)"', get_id)[2]
+                img_url = f'https://hbimg.huabanimg.com/{img_id}_fw658'
+                # 存储图片
+                if not os.path.exists(r'C:\\爬取的数据\花瓣图网'):
+                    os.makedirs(r'C:\\爬取的数据\花瓣图网')
+                with open(fr'C:\\爬取的数据\花瓣图网\{img_id}.png', 'wb') as f:
+                    f.write(requests.get(img_url).content)
+                    print(f'存储第{num}张图片成功！')
+                num += 1
+            else:
+                continue
+
+
+def main():
+    # get请求输入名字得到的网址得到总页数以及名字
+    url_name_pages = get_name()
+    # 通过输入获取页数得到页面的pin_id
+    pages_list_url = input_pages(url_name_pages)
+    # 通过得到的pin_id拼接url在得到图片的完成地址并保存本地
+    get_pages_url(pages_list_url)
+
+
+if __name__ == '__main__':
+    print('本网站，一页为20张图片。')
+    main()
